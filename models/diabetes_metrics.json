@@ -1,0 +1,28 @@
+{
+    "algorithm": "SVM",
+    "accuracy": 0.7532467532467533,
+    "precision": 0.66,
+    "recall": 0.6111111111111112,
+    "f1_score": 0.6346153846153846,
+    "roc_auc": 0.7924074074074074,
+    "confusion_matrix": [
+        [
+            83,
+            17
+        ],
+        [
+            21,
+            33
+        ]
+    ],
+    "features": [
+        "Pregnancies",
+        "Glucose",
+        "BloodPressure",
+        "SkinThickness",
+        "Insulin",
+        "BMI",
+        "DiabetesPedigreeFunction",
+        "Age"
+    ]
+}

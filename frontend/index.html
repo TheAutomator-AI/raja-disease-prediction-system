@@ -7,8 +7,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.10.3/Recharts.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.16.16/framer-motion.umd.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -70,12 +68,7 @@
 <div id="root"></div>
 <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useMemo, useRef } = React;
-const { motion, AnimatePresence } = window.Motion || window.framerMotion || {};
-const M = motion || { div: 'div', button: 'button', span: 'span' };
-const {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, RadialBarChart, RadialBar, Legend
-} = Recharts;
+const M = { div: 'div', button: 'button', span: 'span' };
 
 /* ============================================================
    REAL MODEL ARTIFACTS (produced by backend/model/train.py)
@@ -109,6 +102,120 @@ const API_BASE = (window.localStorage && window.localStorage.getItem('CREDIT_API
    UTILITIES
    ============================================================ */
 function cls(...a){ return a.filter(Boolean).join(' '); }
+
+/* ============================================================
+   LIGHTWEIGHT SVG CHARTS (no external chart library required)
+   ============================================================ */
+const CHART_COLORS = ["#4F8CFF","#9B6BFF","#27E0C7","#FFC107","#00E676","#FF4D6D"];
+
+function SimpleBarChart({data, keys, height=260, colors=CHART_COLORS}){
+  const max = Math.max(0.0001, ...data.flatMap(d=>keys.map(k=>d[k]||0)));
+  const barGroupW = 100/data.length;
+  return (
+    <div style={{height}} className="w-full flex flex-col">
+      <div className="flex-1 flex items-end gap-2 px-1">
+        {data.map((d,i)=>(
+          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+            <div className="flex items-end gap-1 h-full w-full justify-center">
+              {keys.map((k,ki)=>(
+                <div key={k} className="rounded-t-md transition-all duration-700 ease-out" title={`${k}: ${(d[k]*100).toFixed(1)}%`}
+                  style={{
+                    width: `${Math.max(8, 60/keys.length)}%`,
+                    height: `${Math.max(2,(d[k]||0)/max*100)}%`,
+                    background: colors[ki%colors.length],
+                  }}/>
+              ))}
+            </div>
+            <span className="text-[10px] text-white/40 mt-2 text-center truncate w-full">{d.name}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 justify-center mt-3">
+        {keys.map((k,ki)=>(
+          <span key={k} className="text-[11px] text-white/50 flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:colors[ki%colors.length]}}></span>
+            {k.replace('_',' ')}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HorizontalBarChart({data, labelKey="feature", valueKey="importance", height=320, color="#4F8CFF"}){
+  const max = Math.max(0.0001, ...data.map(d=>d[valueKey]));
+  return (
+    <div style={{height, overflowY:'auto'}} className="flex flex-col gap-3 pr-2">
+      {data.map((d,i)=>(
+        <div key={i}>
+          <div className="flex justify-between text-[11px] text-white/50 mb-1">
+            <span className="truncate">{d[labelKey]}</span>
+            <span className="mono">{(d[valueKey]*100).toFixed(1)}%</span>
+          </div>
+          <div className="h-2.5 rounded-full bg-white/8">
+            <div className="h-full rounded-full transition-all duration-700" style={{width:`${(d[valueKey]/max)*100}%`, background:color}}></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SvgLineChart({data, xKey, yKey, height=280, color="#27E0C7", area=true}){
+  const w = 600;
+  const h = height;
+  const pad = 30;
+  const xs = data.map(d=>d[xKey]);
+  const ys = data.map(d=>d[yKey]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = 0, yMax = Math.max(...ys, 1);
+  const px = (x)=> pad + ((x-xMin)/(xMax-xMin||1)) * (w-2*pad);
+  const py = (y)=> h-pad - ((y-yMin)/(yMax-yMin||1)) * (h-2*pad);
+  const points = data.map(d=>`${px(d[xKey])},${py(d[yKey])}`).join(' ');
+  const areaPoints = `${pad},${h-pad} ${points} ${w-pad},${h-pad}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{height}}>
+      {[0,0.25,0.5,0.75,1].map((t,i)=>(
+        <line key={i} x1={pad} x2={w-pad} y1={h-pad-t*(h-2*pad)} y2={h-pad-t*(h-2*pad)} stroke="rgba(255,255,255,0.06)"/>
+      ))}
+      {area && <polygon points={areaPoints} fill={color} opacity="0.12"/>}
+      <polyline points={points} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      <line x1={pad} y1={h-pad} x2={w-pad} y2={pad} stroke="rgba(255,255,255,0.10)" strokeDasharray="4 4"/>
+      <text x={pad} y={h-8} fontSize="11" fill="rgba(255,255,255,0.35)">{xMin}</text>
+      <text x={w-pad-18} y={h-8} fontSize="11" fill="rgba(255,255,255,0.35)">{xMax}</text>
+    </svg>
+  );
+}
+
+function DonutChart({data, height=220}){
+  const total = data.reduce((a,d)=>a+d.value,0) || 1;
+  let cumulative = 0;
+  const r = 70, cx=100, cy=100, sw=24;
+  const circumference = 2*Math.PI*r;
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 200 200" style={{height, width:height}}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={sw}/>
+        {data.map((d,i)=>{
+          const frac = d.value/total;
+          const dash = frac*circumference;
+          const offset = circumference - (cumulative*circumference);
+          cumulative += frac;
+          return (
+            <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth={sw}
+              strokeDasharray={`${dash} ${circumference-dash}`} strokeDashoffset={offset}
+              transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="butt"
+              style={{transition:"stroke-dasharray 0.8s ease"}}/>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function AreaTrendChart({data, xKey, yKey, height=220, color="#4F8CFF"}){
+  return <SvgLineChart data={data} xKey={xKey} yKey={yKey} height={height} color={color} area={true} />;
+}
 
 function useCountUp(target, duration=1200, dec=0){
   const [val,setVal]=useState(0);
@@ -365,18 +472,11 @@ function Landing({setPage}){
       <section className="mb-24">
         <h2 className="text-2xl font-bold mb-6 text-center">Model Performance Preview</h2>
         <Card className="p-8">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={Object.entries(MODEL_METRICS).map(([name,m])=>({name, ROC_AUC:m.roc_auc, Accuracy:m.accuracy, F1:m.f1_score}))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
-              <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-              <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-              <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-              <Legend />
-              <Bar dataKey="ROC_AUC" fill="#4F8CFF" radius={[6,6,0,0]}/>
-              <Bar dataKey="Accuracy" fill="#9B6BFF" radius={[6,6,0,0]}/>
-              <Bar dataKey="F1" fill="#27E0C7" radius={[6,6,0,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
+          <SimpleBarChart
+            data={Object.entries(MODEL_METRICS).map(([name,m])=>({name, ROC_AUC:m.roc_auc, Accuracy:m.accuracy, F1:m.f1_score}))}
+            keys={["ROC_AUC","Accuracy","F1"]}
+            height={280}
+          />
         </Card>
       </section>
 
@@ -404,8 +504,8 @@ function Dashboard({history}){
   ];
 
   const trend = [
-    {day:"Mon",predictions:120},{day:"Tue",predictions:180},{day:"Wed",predictions:150},
-    {day:"Thu",predictions:220},{day:"Fri",predictions:260},{day:"Sat",predictions:140},{day:"Sun",predictions:190},
+    {idx:0,day:"Mon",predictions:120},{idx:1,day:"Tue",predictions:180},{idx:2,day:"Wed",predictions:150},
+    {idx:3,day:"Thu",predictions:220},{idx:4,day:"Fri",predictions:260},{idx:5,day:"Sat",predictions:140},{idx:6,day:"Sun",predictions:190},
   ];
 
   const recent = history.slice(-6).reverse().length ? history.slice(-6).reverse() : [
@@ -434,32 +534,14 @@ function Dashboard({history}){
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         <Card className="p-6 lg:col-span-2">
           <h3 className="font-bold mb-4">Prediction Volume (7 days)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={trend}>
-              <defs>
-                <linearGradient id="vol" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#4F8CFF" stopOpacity={0.5}/>
-                  <stop offset="100%" stopColor="#4F8CFF" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
-              <XAxis dataKey="day" stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-              <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-              <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-              <Area type="monotone" dataKey="predictions" stroke="#4F8CFF" fill="url(#vol)" strokeWidth={2}/>
-            </AreaChart>
-          </ResponsiveContainer>
+          <AreaTrendChart data={trend} xKey="idx" yKey="predictions" height={220} color="#4F8CFF"/>
+          <div className="flex justify-between text-[11px] text-white/40 px-2 -mt-2">
+            {trend.map(t=><span key={t.idx}>{t.day}</span>)}
+          </div>
         </Card>
         <Card className="p-6">
           <h3 className="font-bold mb-4">Risk Level Distribution</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={riskDist} dataKey="value" nameKey="name" innerRadius={55} outerRadius={80} paddingAngle={3}>
-                {riskDist.map((d,i)=><Cell key={i} fill={d.color}/>)}
-              </Pie>
-              <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-            </PieChart>
-          </ResponsiveContainer>
+          <DonutChart data={riskDist} height={200}/>
           <div className="flex flex-wrap gap-2 justify-center mt-2">
             {riskDist.map((d,i)=><span key={i} className="text-xs flex items-center gap-1 text-white/60"><span className="w-2 h-2 rounded-full inline-block" style={{background:d.color}}></span>{d.name}</span>)}
           </div>
@@ -690,46 +772,20 @@ function Analytics(){
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
         <Card className="p-6">
           <h3 className="font-bold mb-4">Feature Importance</h3>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={FEATURE_IMPORTANCE} layout="vertical" margin={{left:40}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
-              <XAxis type="number" stroke="rgba(255,255,255,0.4)" fontSize={11}/>
-              <YAxis type="category" dataKey="feature" width={150} stroke="rgba(255,255,255,0.4)" fontSize={11}/>
-              <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-              <Bar dataKey="importance" fill="#4F8CFF" radius={[0,6,6,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
+          <HorizontalBarChart data={FEATURE_IMPORTANCE} labelKey="feature" valueKey="importance" height={320} color="#4F8CFF"/>
         </Card>
         <Card className="p-6">
           <h3 className="font-bold mb-4">ROC Curve — {BEST_MODEL}</h3>
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={ROC_CURVE}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
-              <XAxis dataKey="fpr" stroke="rgba(255,255,255,0.4)" fontSize={11} label={{value:"False Positive Rate", position:"insideBottom", offset:-5, fill:"rgba(255,255,255,0.4)", fontSize:11}}/>
-              <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} label={{value:"True Positive Rate", angle:-90, position:"insideLeft", fill:"rgba(255,255,255,0.4)", fontSize:11}}/>
-              <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-              <Line type="monotone" dataKey="tpr" stroke="#27E0C7" strokeWidth={3} dot={false}/>
-            </LineChart>
-          </ResponsiveContainer>
+          <SvgLineChart data={ROC_CURVE} xKey="fpr" yKey="tpr" height={300} color="#27E0C7"/>
+          <div className="flex justify-between text-[11px] text-white/40 px-2 mt-1">
+            <span>False Positive Rate →</span><span>True Positive Rate ↑</span>
+          </div>
         </Card>
       </div>
 
       <Card className="p-6 mb-6">
         <h3 className="font-bold mb-4">Model Comparison — All Metrics</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={compData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)"/>
-            <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-            <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12}/>
-            <Tooltip contentStyle={{background:"#0c1224",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12}}/>
-            <Legend/>
-            <Bar dataKey="accuracy" fill="#4F8CFF" radius={[6,6,0,0]}/>
-            <Bar dataKey="precision" fill="#9B6BFF" radius={[6,6,0,0]}/>
-            <Bar dataKey="recall" fill="#27E0C7" radius={[6,6,0,0]}/>
-            <Bar dataKey="f1_score" fill="#FFC107" radius={[6,6,0,0]}/>
-            <Bar dataKey="roc_auc" fill="#00E676" radius={[6,6,0,0]}/>
-          </BarChart>
-        </ResponsiveContainer>
+        <SimpleBarChart data={compData} keys={["accuracy","precision","recall","f1_score","roc_auc"]} height={280}/>
       </Card>
 
       <div className="grid md:grid-cols-3 gap-6">
